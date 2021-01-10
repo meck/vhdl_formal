@@ -1,4 +1,8 @@
-self: super: {
+self: super:
+let
+  runChecks = false;
+in
+{
 
   # Yosys with plugin for synthesizing
   # GHDL output
@@ -23,8 +27,7 @@ self: super: {
     makeFlags = old.makeFlags
       ++ [ "ENABLE_GHDL=1" "GHDL_PREFIX=${self.ghdl-llvm}" ];
 
-    # Save some time
-    # doCheck = false;
+    doCheck = runChecks;
   });
 
   # GHDL
@@ -39,8 +42,7 @@ self: super: {
       sha256 = "1a3f2n6iryq7hnncd4maqzanknq92xqng4qw7dzn4327h6jxzqvk";
     };
 
-    # Save some time
-    # doCheck = false;
+    doCheck = runChecks;
 
     # https://github.com/NixOS/nixpkgs/issues/97466
     propagatedBuildInputs = [ super.zlib ];
@@ -53,5 +55,47 @@ self: super: {
     '';
 
   });
+
+  symbiyosys = super.symbiyosys.overrideAttrs (old: rec {
+    # Symbiysys checks not working atm.
+    # https://github.com/YosysHQ/SymbiYosys/pull/115
+    # doCheck = true;
+    # checkInputs = old.checkInputs ++ [ self.super_prove super.avy super.btor2tools];
+  });
+
+  # Super Prove
+  super_prove = super.stdenv.mkDerivation rec {
+    name = "super_prove-${version}";
+    version = "2017.10.07";
+    src = super.fetchurl {
+      url =
+        "https://downloads.bvsrc.org/super_prove/super_prove-hwmcc17_final-2-d7b71160dddb-Ubuntu_14.04-Release.tar.gz";
+      sha256 = "0ay4m5lvwlazdq21wfng4nvlbvjq264rzzdcpsk9cp381lvnv9fq";
+    };
+
+    nativeBuildInputs = with super; [
+      autoPatchelfHook
+      python27
+      readline
+      zlib
+      stdenv.cc.cc.lib
+    ];
+
+    installPhase = ''
+      mkdir -p $out/libexec $out/bin
+      mv bin $out/libexec
+      mv lib $out/libexec
+      cat > $out/bin/suprove <<EOF
+      #!${super.runtimeShell}
+      # `+` option is engine name
+      tool=super_prove
+      if [[ "\$1" != "\''${1#+}" ]]; then tool="\''${1#+}"; shift; fi
+      exec $out/libexec/bin/\''${tool}.sh "\$@"
+      EOF
+      chmod +x $out/bin/suprove
+    '';
+
+    checkPhase = "${super.stdenv.shell} -n $out/bin/suprove";
+  };
 
 }
